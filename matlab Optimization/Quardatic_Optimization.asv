@@ -1,0 +1,69 @@
+%Load Data for forecasted DA price for each hour Pi(0)
+load('pi0.mat')
+syms gamma E0 eff_c eff_d eff_s;
+E_min = 50;
+E_max = 500;
+hours = 3;
+%Charging and Discharging Power
+%P_t dis,DA and P_t,chg,DA
+X = sym('x',[2*hours,1]);
+
+%Difference Matrix P_t dis,DA - P_t,chg,DA
+for i=1:hours
+    diff(i) = (X(hours+i) - X(i))
+end
+
+
+%Day Ahead Market Price Pi(t)
+for i=1:hours
+    pi(i) = pi0(i) + gamma * diff(i)
+end
+
+%Revenue has to be maximize
+%converting into minimization
+Revenue = pi*diff.'
+
+
+Rsub = subs(Revenue,[gamma],[1.5])
+
+fsym = gradient(Rsub,X)
+f =double(subs(fsym,X,zeros(size(X))))
+
+H = 0.5*double(hessian(Rsub,X))
+
+%qpoption = optimset('Algorithm','interior-point-convex','Disp','iter');
+%tic
+%[x3,fval3] = quadprog(H,f,)
+
+
+E = cell(2*hours,1);
+b = cell(2*hours,1);
+Eo = 25;
+%E{1} =[eff_c -1/eff_d]*[X(1);X(hours+1)];
+
+%for i=2:hours
+ %   E{i} = eff_s *E{i-1}+[eff_c -1/eff_d]*[X(i);X(i+hours)];
+%end
+
+E{1} = [eff_c -1/eff_d]
+E{hours+1} = -[eff_c -1/eff_d]
+b{1}= E_max-E0
+b{hours+1} = -E_min+E0
+
+for i=2:hours
+    E{i} = [E{i-1},E{1}]
+    E{i+hours} = -[E{i-1},E{1}]
+    b{i} = b{1}
+    b{hours+i} = b{hours+1}
+end
+A= E.'
+Aeq = A{hours}
+beq = [];
+
+ub = 100;
+lb =10;
+
+
+qpopts = optimset()
+[x,fval]= quadprog(H,f,A,b,Aeq,beq,lb,ub,[],qpopts);
+toc
